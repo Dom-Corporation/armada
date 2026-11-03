@@ -8,7 +8,7 @@ import { readAccount } from './account';
 import { argvOf, cancelOnInterrupt, extractTar, onCommit, runCI, verdictCI } from './ci';
 import { buildDashboard, dashboardUrl, everyDashboardUrl, openInBrowser, serveDashboard } from './dashboard';
 import { contractOf } from './contract';
-import { deploymentConfig } from './deploy';
+import { artifactsJurisdiction, deploymentConfig } from './deploy';
 import { deleteImageWith, deleteSnapshotWith, registryCredentials } from './registry';
 import { destroyDeployment, destroyName, DestroyStateSchema } from './destroy';
 import { findProject, push } from './push';
@@ -278,9 +278,19 @@ function wrangler(words: readonly string[], account: string, stdin?: string): st
   return output;
 }
 
+/** The template the Worker deploys from; the one place the artifacts bucket's jurisdiction is set. */
+function workerTemplate(): string {
+  return readFileSync(join(ROOT, 'worker', 'wrangler.jsonc'), 'utf8');
+}
+
+/** wrangler's flag for a bucket in an R2 jurisdiction: none for the default location. */
+function inJurisdiction(jurisdiction: string | undefined): string[] {
+  return jurisdiction === undefined ? [] : ['--jurisdiction', jurisdiction];
+}
+
 /** Whether the account has `bucket`, asked by its name: `r2 bucket list` prints only an account's first 20 buckets. */
-function hasBucket(account: string, bucket: string): boolean {
-  const { exitCode, output } = wranglerRan(['r2', 'bucket', 'info', bucket], account);
+function hasBucket(account: string, bucket: string, jurisdiction: string | undefined): boolean {
+  const { exitCode, output } = wranglerRan(['r2', 'bucket', 'info', bucket, ...inJurisdiction(jurisdiction)], account);
 
   if (exitCode === 0) return true;
 
@@ -461,7 +471,7 @@ async function destroy(name: string, force: boolean): Promise<number> {
   mkdirSync(CONFIG_DIR, { recursive: true });
 
   return await destroyDeployment(name, account, force, {
-    run: wranglerRan, fetch,
+    run: wranglerRan, fetch, jurisdiction: artifactsJurisdiction(workerTemplate()),
     connection: () => connection,
     load: () => saved,
     save: (state) => {
@@ -544,25 +554,27 @@ interface Given {
 
 async function install(account: string, name: string, file: string, { vcpus, token: kept, accountToken, secrets }: Given): Promise<void> {
   const bucket = `${name}-artifacts`;
+  const jurisdiction = artifactsJurisdiction(workerTemplate());
+  const where = inJurisdiction(jurisdiction);
 
-  if (!hasBucket(account, bucket)) wrangler(['r2', 'bucket', 'create', bucket], account);
-  const rules = wrangler(['r2', 'bucket', 'lifecycle', 'list', bucket], account);
+  if (!hasBucket(account, bucket, jurisdiction)) wrangler(['r2', 'bucket', 'create', bucket, ...where], account);
+  const rules = wrangler(['r2', 'bucket', 'lifecycle', 'list', bucket, ...where], account);
 
   for (const prefix of ['packs/', 'jobs/']) {
     const rule = `expire-${prefix.slice(0, -1)}`;
 
-    if (!rules.includes(rule)) wrangler(['r2', 'bucket', 'lifecycle', 'add', bucket, rule, prefix, '--expire-days', '7', '--force'], account);
+    if (!rules.includes(rule)) wrangler(['r2', 'bucket', 'lifecycle', 'add', bucket, rule, prefix, '--expire-days', '7', '--force', ...where], account);
   }
 
   // A multipart upload whose client died before completing or aborting it: its parts hold storage, and the bucket
   // cannot be deleted while it is open.
-  if (!rules.includes('abort-uploads')) wrangler(['r2', 'bucket', 'lifecycle', 'add', bucket, 'abort-uploads', '', '--abort-multipart-days', '1', '--force'], account);
+  if (!rules.includes('abort-uploads')) wrangler(['r2', 'bucket', 'lifecycle', 'add', bucket, 'abort-uploads', '', '--abort-multipart-days', '1', '--force', ...where], account);
 
   const config = join(tmpdir(), `armada-wrangler-${String(process.pid)}.jsonc`);
 
   await buildDashboard(DASHBOARD);
   // Read from the checkout as it is deployed, as its commit is, not as it was before a drain that may have taken hours.
-  writeFileSync(config, deploymentConfig(readFileSync(join(ROOT, 'worker', 'wrangler.jsonc'), 'utf8'), {
+  writeFileSync(config, deploymentConfig(workerTemplate(), {
     name, account, main: join(ROOT, 'worker', 'src', 'worker.ts'), dashboard: DASHBOARD, bucket, vcpus, sha: sourceSha(), contract: contractOf(ROOT),
   }));
 

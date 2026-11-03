@@ -42,6 +42,7 @@
   "vars": { "FLEET_VCPUS": "1500", "ARMADA_SHA": "", "ARMADA_CONTRACT": "" },
   "version_metadata": { "binding": "VERSION" },
   // Packs and job artifacts expire after 7 days (lifecycle rules `armada deploy` adds); CI verdicts are kept, and a
-  // pushed bundle while a task points to it.
-  "r2_buckets": [{ "binding": "ARTIFACTS", "bucket_name": "armada-artifacts" }]
+  // pushed bundle while a task points to it. The bucket lives in the EU jurisdiction (a separate namespace of buckets,
+  // so it keeps its name); `armada deploy` and `armada destroy` read it from here.
+  "r2_buckets": [{ "binding": "ARTIFACTS", "bucket_name": "armada-artifacts", "jurisdiction": "eu" }]
 }

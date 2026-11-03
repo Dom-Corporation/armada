@@ -29,6 +29,8 @@ export interface WranglerResult { readonly exitCode: number; readonly output: st
 export interface DestroyIO {
   readonly run: (words: readonly string[], account: string) => WranglerResult;
   readonly fetch: typeof fetch;
+  /** The R2 jurisdiction of the artifacts bucket, from the Worker's template; absent for the default location. */
+  readonly jurisdiction?: string | undefined;
   readonly connection: () => Connection | null;
   readonly load: () => DestroyState | null;
   readonly save: (state: DestroyState) => void;
@@ -73,14 +75,14 @@ export function destroyName(name: string | undefined): string {
 class Cloudflare {
   constructor(private readonly account: string, private readonly token: string, private readonly io: DestroyIO) {}
 
-  async request(path: string, init: RequestInit = {}): Promise<Response> {
+  async request(path: string, init: RequestInit = {}, headers: Record<string, string> = {}): Promise<Response> {
     return await this.io.fetch(`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(this.account)}${path}`, {
-      ...init, headers: { authorization: `Bearer ${this.token}`, 'content-type': 'application/json' },
+      ...init, headers: { authorization: `Bearer ${this.token}`, 'content-type': 'application/json', ...headers },
     });
   }
 
-  async read(path: string): Promise<Json> {
-    const answer = await this.request(path);
+  async read(path: string, headers: Record<string, string> = {}): Promise<Json> {
+    const answer = await this.request(path, {}, headers);
 
     if (answer.status === 404) return null;
     const decoded = v.parse(Envelope, await answer.json());
@@ -256,22 +258,25 @@ function validateInventory(state: DestroyState): void {
 async function expireBucket(cloud: Cloudflare, state: DestroyState, io: DestroyIO): Promise<boolean> {
   const bucket = `${state.name}-artifacts`;
   const account = state.account;
-  const info = await cloud.read(`/r2/buckets/${bucket}`);
+  const { jurisdiction } = io;
+  const headers: Record<string, string> = jurisdiction === undefined ? {} : { 'cf-r2-jurisdiction': jurisdiction };
+  const where = jurisdiction === undefined ? [] : ['--jurisdiction', jurisdiction];
+  const info = await cloud.read(`/r2/buckets/${bucket}`, headers);
 
   if (info === null) return true;
-  const { rules } = v.parse(Lifecycle, await cloud.read(`/r2/buckets/${bucket}/lifecycle`));
+  const { rules } = v.parse(Lifecycle, await cloud.read(`/r2/buckets/${bucket}/lifecycle`, headers));
   const rule = rules.find((each) => each.id === EXPIRY_RULE);
 
   if (rule !== undefined && (!rule.enabled || (rule.conditions.prefix ?? '') !== '' || rule.deleteObjectsTransition?.condition.type !== 'Age' || rule.deleteObjectsTransition.condition.maxAge !== 86400 || rule.abortMultipartUploadsTransition?.condition.type !== 'Age' || rule.abortMultipartUploadsTransition.condition.maxAge !== 86400)) throw new Error(`bucket lifecycle rule ${EXPIRY_RULE} already exists with different actions; refusing to assume it empties this bucket`);
 
-  if (rule === undefined) ran(io, account, ['r2', 'bucket', 'lifecycle', 'add', bucket, EXPIRY_RULE, '', '--expire-days', '1', '--abort-multipart-days', '1', '--force']);
+  if (rule === undefined) ran(io, account, ['r2', 'bucket', 'lifecycle', 'add', bucket, EXPIRY_RULE, '', '--expire-days', '1', '--abort-multipart-days', '1', '--force', ...where]);
 
   if (state.bucketAfter === undefined) {
     state.bucketAfter = io.now() + DAY;
     io.save(state);
   }
 
-  const removed = io.run(['r2', 'bucket', 'delete', bucket], account);
+  const removed = io.run(['r2', 'bucket', 'delete', bucket, ...where], account);
 
   if (removed.exitCode === 0 || removed.output.includes('[code: 10006]')) {
     io.say(`removed bucket ${bucket}`);

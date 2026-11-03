@@ -6,7 +6,7 @@ import * as v from 'valibot';
 import { extractTar, lanesFor, poolFor, remainingDeadline } from '../src/ci';
 import { manifestOf, packBase, packOf } from '../src/git';
 import { parseConfig } from '../src/config';
-import { deploymentConfig } from '../src/deploy';
+import { artifactsJurisdiction, deploymentConfig } from '../src/deploy';
 import { grade, rowName, taskName, underExit, type TaskAnswer } from '../src/grade';
 import { environmentKey, HostSchema, JsonSchema, PACKER, PROTOCOL, errorOf, fill, fitSize, itemValues, JobSpecSchema, MAX_ARGUMENT_BYTES, medians, mustDrain, RecipeSchema, recordSamples, refusal, servedFloor, usageOf, weightOf, type Health, type Host, type Json, type Outcome, type Recipe } from '../src/protocol';
 import { Armada, PACK_PART } from '../src/sdk';
@@ -323,11 +323,11 @@ describe('a deployment\'s wrangler config', () => {
     // The same template laid out otherwise: no comments, its keys in another order, one line.
     const reordered = JSON.stringify(Object.fromEntries(Object.entries(v.parse(v.record(v.string(), JsonSchema), Bun.JSONC.parse(template))).reverse()));
     const deployment = { name: 'armada-x', account: 'a'.repeat(32), main: '/home/o\'brien/"armada"\\worker.ts', dashboard: '/tmp/dash', bucket: 'armada-x-artifacts', vcpus: 64, sha: 'b'.repeat(40), contract: 'c'.repeat(64) };
-    const read = (text: string) => v.parse(v.looseObject({ name: v.string(), account_id: v.string(), main: v.string(), assets: v.looseObject({ directory: v.string() }), vars: v.record(v.string(), v.string()), r2_buckets: v.array(v.looseObject({ bucket_name: v.string() })), durable_objects: JsonSchema }), JSON.parse(deploymentConfig(text, deployment)));
+    const read = (text: string) => v.parse(v.looseObject({ name: v.string(), account_id: v.string(), main: v.string(), assets: v.looseObject({ directory: v.string() }), vars: v.record(v.string(), v.string()), r2_buckets: v.array(v.looseObject({ bucket_name: v.string(), jurisdiction: v.optional(v.string()) })), durable_objects: JsonSchema }), JSON.parse(deploymentConfig(text, deployment)));
     const [laid, other] = [read(template), read(reordered)];
 
-    expect({ same: laid, name: laid.name, account: laid.account_id, main: laid.main, assets: laid.assets.directory, vars: laid.vars, buckets: laid.r2_buckets.map((each) => each.bucket_name), schema: '$schema' in laid })
-      .toEqual({ same: other, name: 'armada-x', account: 'a'.repeat(32), main: deployment.main, assets: '/tmp/dash', vars: { FLEET_VCPUS: '64', ARMADA_SHA: 'b'.repeat(40), ARMADA_CONTRACT: 'c'.repeat(64), ARMADA_NAME: 'armada-x', ARMADA_ACCOUNT: 'a'.repeat(32) }, buckets: ['armada-x-artifacts'], schema: false });
+    expect({ same: laid, name: laid.name, account: laid.account_id, main: laid.main, assets: laid.assets.directory, vars: laid.vars, buckets: laid.r2_buckets.map((each) => each.bucket_name), jurisdictions: laid.r2_buckets.map((each) => each.jurisdiction), eu: artifactsJurisdiction(template), schema: '$schema' in laid })
+      .toEqual({ same: other, name: 'armada-x', account: 'a'.repeat(32), main: deployment.main, assets: '/tmp/dash', vars: { FLEET_VCPUS: '64', ARMADA_SHA: 'b'.repeat(40), ARMADA_CONTRACT: 'c'.repeat(64), ARMADA_NAME: 'armada-x', ARMADA_ACCOUNT: 'a'.repeat(32) }, buckets: ['armada-x-artifacts'], jurisdictions: ['eu'], eu: 'eu', schema: false });
   });
 });
 

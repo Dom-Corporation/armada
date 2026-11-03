@@ -34,6 +34,7 @@ class Fleet implements DestroyIO {
   protocol = PROTOCOL;
   jobStatus = 200;
   bucketExists = true;
+  jurisdiction: string | undefined = undefined;
   objects = 0;
   uploads = 0;
   rules: Json[] = [];
@@ -90,8 +91,11 @@ class Fleet implements DestroyIO {
 
   readonly run = (words: readonly string[], account: string): WranglerResult => {
     expect(account).toBe(ACCOUNT);
-    const command = words.join(' ');
+    const where = this.jurisdiction === undefined ? [] : ['--jurisdiction', this.jurisdiction];
+    // A jurisdiction bucket is invisible to wrangler without its flag, so each r2 bucket call must carry it.
+    const command = (words[0] === 'r2' && where.length > 0 && words.slice(-2).join(' ') === where.join(' ') ? words.slice(0, -2) : words).join(' ');
 
+    if (words[0] === 'r2') expect(words.slice(words.length - where.length)).toEqual(where);
     this.events.push(`wrangler ${command}`);
 
     if (command === this.fault) return { exitCode: 1, output: 'permission denied' };
@@ -107,7 +111,7 @@ class Fleet implements DestroyIO {
     }
 
     if (words.slice(0, 4).join(' ') === 'r2 bucket lifecycle add') {
-      expect(words).toEqual(['r2', 'bucket', 'lifecycle', 'add', `${NAME}-artifacts`, 'armada-destroy-all', '', '--expire-days', '1', '--abort-multipart-days', '1', '--force']);
+      expect(words.slice(0, words.length - where.length)).toEqual(['r2', 'bucket', 'lifecycle', 'add', `${NAME}-artifacts`, 'armada-destroy-all', '', '--expire-days', '1', '--abort-multipart-days', '1', '--force']);
       this.rules.push(RULE);
 
       return { exitCode: 0, output: 'rule added' };
@@ -132,6 +136,8 @@ class Fleet implements DestroyIO {
     if (url.hostname.endsWith('.workers.dev')) return this.worker(request, url);
     expect(request.headers.get('authorization')).toBe('Bearer fake-oauth');
     const base = `/client/v4/accounts/${ACCOUNT}`;
+
+    if (path.includes('/r2/')) expect(request.headers.get('cf-r2-jurisdiction')).toBe(this.jurisdiction ?? null);
 
     if (path === `${base}/workers/scripts`) {
       if (this.twoScriptPages) return Response.json({ success: true, result: url.searchParams.get('page') === '1' ? this.scripts.slice(0, 1) : this.scripts.slice(1), result_info: { total_pages: 2 } });
@@ -394,6 +400,15 @@ describe('destroy, against a fake wrangler and fake named deployment only', () =
     fleet.snapshotLeft = false;
     expect(await destroyDeployment(NAME, ACCOUNT, false, fleet)).toBe(0);
     expect(fleet.refs.size).toBe(0);
+  });
+
+  test('names the bucket\'s jurisdiction on every API read and wrangler call', async () => {
+    const fleet = new Fleet();
+
+    fleet.jurisdiction = 'eu';
+    expect(await destroyDeployment(NAME, ACCOUNT, false, fleet)).toBe(0);
+    expect(fleet.events.filter((event) => event.includes('/r2/')).length).toBe(2);
+    expect(fleet.bucketExists).toBe(false);
   });
 
   test('sets one whole-bucket day-long expiry/abort rule; re-run removes the empty bucket without S3 or per-object calls', async () => {
