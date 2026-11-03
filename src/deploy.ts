@@ -9,7 +9,7 @@ import * as v from 'valibot';
 const TemplateSchema = v.looseObject({
   assets: v.looseObject({ directory: v.string() }),
   vars: v.looseObject({ FLEET_VCPUS: v.string(), ARMADA_SHA: v.string(), ARMADA_CONTRACT: v.string() }),
-  r2_buckets: v.array(v.looseObject({ binding: v.string(), bucket_name: v.string() })),
+  r2_buckets: v.array(v.looseObject({ binding: v.string(), bucket_name: v.string(), jurisdiction: v.optional(v.string()) })),
 });
 
 /** What a deployment sets in the template: `vcpus` absent keeps the template's fleet cap. */
@@ -37,4 +37,10 @@ export function deploymentConfig(template: string, { name, account, main, dashbo
     vars: { ...parsed.vars, FLEET_VCPUS: vcpus === undefined ? parsed.vars.FLEET_VCPUS : String(vcpus), ARMADA_SHA: sha, ARMADA_CONTRACT: contract, ARMADA_NAME: name, ARMADA_ACCOUNT: account },
     r2_buckets: parsed.r2_buckets.map((each) => each.binding === 'ARTIFACTS' ? { ...each, bucket_name: bucket } : each),
   }, null, 2);
+}
+
+/** The R2 jurisdiction the template puts the ARTIFACTS bucket in (`eu`), if any. A jurisdiction is its own namespace of
+ *  buckets: every `wrangler r2 bucket` call and Cloudflare API read about the bucket needs it named. */
+export function artifactsJurisdiction(template: string): string | undefined {
+  return v.parse(TemplateSchema, Bun.JSONC.parse(template)).r2_buckets.find((each) => each.binding === 'ARTIFACTS')?.jurisdiction;
 }
