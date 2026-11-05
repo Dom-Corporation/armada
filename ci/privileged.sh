@@ -5,7 +5,7 @@ set -eu
 cd "$(dirname "$0")/.."
 # /armada and the checkout on tmpfs, which an overlay takes as its upper and lower dirs, as a container's own disk is;
 # Docker's own root is overlayfs, which it does not.
-docker run --rm --privileged --cgroupns=private --tmpfs /armada --tmpfs /work -e TMPDIR=/work -v "$PWD":/src:ro oven/bun:1.4.0 sh -c '
+docker run --rm --privileged --cgroupns=private --tmpfs /armada --tmpfs /work -e TMPDIR=/work -v "$PWD":/src:ro oven/bun:1.4.4 sh -c '
 set -eu
 apt-get update -qq >/dev/null
 DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends procps util-linux tini git >/dev/null

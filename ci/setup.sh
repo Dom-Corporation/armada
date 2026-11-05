@@ -2,8 +2,8 @@
 # armada's own CI system, as root, once per environment (.armada.json): the
 # bun its scripts run under, pinned, on the runner layer's path.
 set -eu
-BUN_VERSION=1.4.0
-BUN_SHA256=2d03fb5fb83ac8b567aca0a281b2ce1a1a19d488f56c2968d88c3f25e92fe452
+BUN_VERSION=1.4.4
+BUN_SHA256=bf8ccbfb2b0b80159e0f9a6d15c55317add8077534dbc6130a3edb52fccb395c
 curl -fsSL -o /tmp/bun.zip "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64.zip"
 echo "${BUN_SHA256}  /tmp/bun.zip" | sha256sum -c
 unzip -q /tmp/bun.zip -d /tmp
