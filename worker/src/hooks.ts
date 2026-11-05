@@ -141,7 +141,7 @@ export class ArmadaWebhooks extends ArmadaSingle {
 }
 
 /** The bun the driver runs armada under, pinned to its release's digest, the version armada's own CI runs. */
-const BUN = { version: '1.4.0', sha256: '2d03fb5fb83ac8b567aca0a281b2ce1a1a19d488f56c2968d88c3f25e92fe452' };
+const BUN = { version: '1.4.4', sha256: 'bf8ccbfb2b0b80159e0f9a6d15c55317add8077534dbc6130a3edb52fccb395c' };
 
 const ARMADA_REPO = 'https://github.com/AshishKumar4/armada.git';
 

@@ -248,6 +248,8 @@ describe('the github webhook', () => {
     expect(spec.secrets).toEqual(['GITHUB_TOKEN']);
     expect(spec.deployToken).toBe(true);
     expect(spec.recipe.size).toBe('small');
+    expect(spec.recipe.setup).toContain('bun-v1.4.4/bun-linux-x64.zip');
+    expect(spec.recipe.setup).toContain('bf8ccbfb2b0b80159e0f9a6d15c55317add8077534dbc6130a3edb52fccb395c');
     expect(spec.env['ARMADA_REPO']).toBe('owner/armada');
     expect(spec.env['ARMADA_COMMIT']).toBe(SHA);
     expect(spec.env['TARGET_URL']).toBe(`https://armada.test/ui/#/ci/armada/${SHA}`);
